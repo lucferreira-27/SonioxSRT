@@ -11,6 +11,7 @@ from sonioxsrt.subtitles import (
     srt,
     tokens_to_subtitle_segments,
     write_srt_file,
+    _segment_text,
 )
 
 
@@ -34,7 +35,16 @@ def test_render_segments_and_write_srt(tmp_path: Path, sample_tokens):
 
     assert entries, "Rendered entries should not be empty."
     assert [entry.index for entry in entries] == list(range(1, len(entries) + 1))
-    assert all(len(line) <= config.max_cpl for entry in entries for line in entry.lines)
+    for entry, segment in zip(entries, segments, strict=True):
+        expected_text = _segment_text(segment)
+        expected_text = " ".join(expected_text.split())
+        actual_text = " ".join(line.strip() for line in entry.lines).strip()
+        actual_text = " ".join(actual_text.split())
+        assert actual_text == expected_text, (
+            "Subtitle text mismatch:\n"
+            f"expected: {expected_text!r}\n"
+            f"actual:   {actual_text!r}"
+        )
 
     output = tmp_path / "output.srt"
     write_srt_file(entries, output)

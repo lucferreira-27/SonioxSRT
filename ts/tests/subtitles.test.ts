@@ -53,11 +53,17 @@ describe("subtitles", () => {
     expect(entries.map((entry) => entry.index)).toEqual(
       Array.from({ length: entries.length }, (_, i) => i + 1)
     );
-    expect(
-      entries.every((entry) =>
-        entry.lines.every((line) => line.length <= config.max_cpl)
-      )
-    ).toBe(true);
+    entries.forEach((entry, idx) => {
+      const segment = segments[idx];
+      const expectedRaw = (segment.tokens ?? [])
+        .map((token) => token.text ?? "")
+        .join("");
+      const normalize = (value: string): string =>
+        value.split(/\s+/).filter(Boolean).join(" ").trim();
+      const expected = normalize(expectedRaw);
+      const actual = normalize(entry.lines.map((line) => line.trim()).join(" "));
+      expect(actual).toBe(expected);
+    });
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sonioxsrt-ts-"));
     const output = path.join(tmpDir, "output.srt");

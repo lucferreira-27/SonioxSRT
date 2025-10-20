@@ -323,6 +323,7 @@ def enforce_readability(
     max_cps: float,
     min_dur: int,
     max_dur: int,
+    max_chars: Optional[int],
     use_ellipses: bool,
 ) -> List[dict]:
     out: List[dict] = []
@@ -336,7 +337,9 @@ def enforce_readability(
             dur = max(1, end - start)
             cps = _chars_for_cps(text) / (dur / 1000.0)
 
-            if dur > max_dur or cps > max_cps:
+            if dur > max_dur or cps > max_cps or (
+                max_chars is not None and len(text) > max_chars
+            ):
                 toks = current["tokens"]
                 if len(toks) <= 1:
                     out.append(current)
@@ -449,12 +452,15 @@ def _wrap_two_lines_token_aware(
             last_safe = i
         if char_len > max_cpl:
             if last_safe is not None:
-                left_text = _concat_text(tokens[: last_safe + 1]).strip()
-                right_text = _concat_text(tokens[last_safe + 1 :]).strip()
-                return [
-                    left_text[:max_cpl].rstrip(),
-                    right_text[:max_cpl].rstrip(),
-                ]
+                candidate = last_safe
+                while candidate >= 0:
+                    if candidate in safe_after:
+                        left_text = _concat_text(tokens[: candidate + 1]).rstrip()
+                        if len(left_text) <= max_cpl:
+                            right_text = _concat_text(tokens[candidate + 1 :]).lstrip()
+                            if len(right_text) <= max_cpl:
+                                return [left_text, right_text]
+                    candidate -= 1
             break
 
     total_chars = sum(len(t.get("text", "")) for t in tokens)
@@ -470,14 +476,12 @@ def _wrap_two_lines_token_aware(
                 best_delta = delta
                 nearest = i
     if nearest is not None:
-        left_text = _concat_text(tokens[: nearest + 1]).strip()
-        right_text = _concat_text(tokens[nearest + 1 :]).strip()
-        return [
-            left_text[:max_cpl].rstrip(),
-            right_text[:max_cpl].rstrip(),
-        ]
+        left_text = _concat_text(tokens[: nearest + 1]).rstrip()
+        right_text = _concat_text(tokens[nearest + 1 :]).lstrip()
+        if len(left_text) <= max_cpl and len(right_text) <= max_cpl:
+            return [left_text, right_text]
 
-    return _wrap_two_lines_naive(text, max_cpl, max_lines)
+    return [text.strip()]
 
 
 def tokens_to_subtitle_segments(
@@ -493,6 +497,7 @@ def tokens_to_subtitle_segments(
         max_cps=config.max_cps,
         min_dur=config.min_dur_ms,
         max_dur=config.max_dur_ms,
+        max_chars=config.max_cpl * config.max_lines,
         use_ellipses=config.ellipses,
     )
     return segments

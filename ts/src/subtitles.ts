@@ -372,6 +372,7 @@ export function enforceReadability(
   config: SubtitleConfig
 ): SubtitleSegment[] {
   const out: SubtitleSegment[] = [];
+  const maxChars = config.max_cpl * config.max_lines;
 
   for (const segment of segments) {
     const queue: SubtitleSegment[] = [segment];
@@ -383,7 +384,10 @@ export function enforceReadability(
       const cps = charsForCps(text) / (duration / 1000);
 
       const tokens = (current.tokens ?? []) as WordToken[];
-      if ((duration > config.max_dur_ms || cps > config.max_cps) && tokens.length > 1) {
+      if (
+        (duration > config.max_dur_ms || cps > config.max_cps || text.length > maxChars) &&
+        tokens.length > 1
+      ) {
         const idx = findSplitIndex(tokens);
         const leftTokens = tokens.slice(0, idx);
         const rightTokens = tokens.slice(idx);
@@ -521,12 +525,19 @@ function wrapTwoLinesTokenAware(
     }
     if (charLen > maxCpl) {
       if (lastSafe !== undefined) {
-        const left = concatText(tokens.slice(0, lastSafe + 1));
-        const right = concatText(tokens.slice(lastSafe + 1));
-        return [
-          left.slice(0, maxCpl).trimEnd(),
-          right.slice(0, maxCpl).trimEnd()
-        ];
+        let candidate = lastSafe;
+        while (candidate >= 0) {
+          if (safeAfter.has(candidate)) {
+            const left = concatText(tokens.slice(0, candidate + 1)).trimEnd();
+            if (left.length <= maxCpl) {
+              const right = concatText(tokens.slice(candidate + 1)).trimStart();
+              if (right.length <= maxCpl) {
+                return [left, right];
+              }
+            }
+          }
+          candidate -= 1;
+        }
       }
       break;
     }
@@ -551,15 +562,14 @@ function wrapTwoLinesTokenAware(
     }
   }
   if (nearest !== undefined) {
-    const left = concatText(tokens.slice(0, nearest + 1));
-    const right = concatText(tokens.slice(nearest + 1));
-    return [
-      left.slice(0, maxCpl).trimEnd(),
-      right.slice(0, maxCpl).trimEnd()
-    ];
+    const left = concatText(tokens.slice(0, nearest + 1)).trimEnd();
+    const right = concatText(tokens.slice(nearest + 1)).trimStart();
+    if (left.length <= maxCpl && right.length <= maxCpl) {
+      return [left, right];
+    }
   }
 
-  return wrapTwoLinesNaive(text, maxCpl, maxLines);
+  return [text.trim()];
 }
 
 export function extractTokens(transcript: Transcript): Token[] {
