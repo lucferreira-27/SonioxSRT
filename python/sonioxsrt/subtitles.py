@@ -28,6 +28,8 @@ class SubtitleConfig:
     max_cps: float = DEFAULT_MAX_CPS
     max_cpl: int = 42
     max_lines: int = 2
+    line_split_delimiters: Tuple[str, ...] = ()
+    segment_on_sentence: bool = False
     split_on_speaker: bool = False
     ellipses: bool = False
 
@@ -143,6 +145,7 @@ def build_segments(
     tokens: Sequence[dict],
     gap_threshold: int,
     split_on_speaker: bool,
+    segment_on_sentence: bool,
 ) -> List[dict]:
     segments: List[dict] = []
     current: List[dict] = []
@@ -150,7 +153,7 @@ def build_segments(
     last_token_end: Optional[int] = None
     current_speaker: Optional[str] = None
 
-    def close_segment() -> None:
+    def close_segment(sentence_break: bool = False) -> None:
         nonlocal current, current_start, last_token_end, current_speaker
         if not current:
             return
@@ -176,6 +179,7 @@ def build_segments(
                 "end": end,
                 "speaker": speaker,
                 "tokens": current,
+                "sentence_break": sentence_break,
             }
         )
 
@@ -230,8 +234,15 @@ def build_segments(
         if current_speaker is None and speaker is not None:
             current_speaker = speaker
 
-        if text and is_sentence_break(text):
-            close_segment()
+        sentence_break = False
+        if text:
+            if is_sentence_break(text):
+                sentence_break = True
+            elif segment_on_sentence and _ends_with_sentence_break(text):
+                sentence_break = True
+
+        if sentence_break:
+            close_segment(sentence_break=True)
 
     close_segment()
     return segments
@@ -249,6 +260,90 @@ def _segment_text(seg: dict) -> str:
 
 def _chars_for_cps(text: str) -> int:
     return len(text.replace(" ", ""))
+
+
+def _ends_with_sentence_break(text: str) -> bool:
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+    return stripped[-1] in SENTENCE_ENDERS
+
+
+def _split_text_by_delimiters(text: str, delimiters: Sequence[str]) -> List[str]:
+    if not text:
+        return []
+
+    cleaned = text.replace("\n", " ")
+    delim_set = {d for d in delimiters if d}
+    if not delim_set:
+        stripped = cleaned.strip()
+        return [stripped] if stripped else []
+
+    pieces: List[str] = []
+    current_chars: List[str] = []
+    for char in cleaned:
+        current_chars.append(char)
+        if char in delim_set:
+            chunk = "".join(current_chars).strip()
+            if chunk:
+                pieces.append(chunk)
+            current_chars = []
+
+    remainder = "".join(current_chars).strip()
+    if remainder:
+        pieces.append(remainder)
+
+    return pieces
+
+
+def _partition_chunks(
+    chunks: Sequence[str], max_lines: int, max_cpl: int
+) -> Optional[List[str]]:
+    if max_lines <= 0:
+        return []
+    if not chunks:
+        return []
+
+    def helper(start: int, remaining: int) -> Optional[List[str]]:
+        if start == len(chunks):
+            return []
+        if remaining == 0:
+            return None
+
+        line = ""
+        for end in range(start, len(chunks)):
+            line = f"{line} {chunks[end]}".strip() if line else chunks[end]
+            if len(line) > max_cpl:
+                break
+            rest = helper(end + 1, remaining - 1)
+            if rest is not None:
+                return [line, *rest]
+        return None
+
+    return helper(0, max_lines)
+
+
+def _wrap_with_preferred_delimiters(
+    text: str,
+    delimiters: Sequence[str],
+    max_cpl: int,
+    max_lines: int,
+) -> Optional[List[str]]:
+    if max_lines <= 1:
+        return None
+
+    chunks = _split_text_by_delimiters(text, delimiters)
+    if len(chunks) <= 1:
+        return None
+
+    partition = _partition_chunks(chunks, max_lines, max_cpl)
+    if not partition:
+        return None
+
+    lines = [line.strip() for line in partition if line.strip()]
+    if len(lines) <= 1:
+        return None
+    return lines[:max_lines]
 
 
 def _find_split_index(tokens: Sequence[dict]) -> int:
@@ -325,6 +420,7 @@ def enforce_readability(
     max_dur: int,
     max_chars: Optional[int],
     use_ellipses: bool,
+    preserve_sentence_breaks: bool,
 ) -> List[dict]:
     out: List[dict] = []
 
@@ -349,11 +445,13 @@ def enforce_readability(
                     "tokens": toks[:idx],
                     "start": toks[0].get("start_ms", start),
                     "end": toks[idx - 1].get("end_ms", end),
+                    "sentence_break": False,
                 }
                 right = {
                     "tokens": toks[idx:],
                     "start": toks[idx].get("start_ms", start),
                     "end": toks[-1].get("end_ms", end),
+                    "sentence_break": current.get("sentence_break", False),
                 }
                 if use_ellipses:
                     left["suffix_ellipsis"] = True
@@ -374,11 +472,16 @@ def enforce_readability(
             start, end = _segment_time(seg)
             dur = end - start
             if dur < min_dur and i + 1 < len(current_segments):
+                if preserve_sentence_breaks and seg.get("sentence_break"):
+                    merged.append(seg)
+                    i += 1
+                    continue
                 nxt = current_segments[i + 1]
                 n_start, n_end = _segment_time(nxt)
                 if n_end - start <= max_dur:
                     toks = seg["tokens"] + nxt["tokens"]
                     merged_seg = {"tokens": toks, "start": start, "end": n_end}
+                    merged_seg["sentence_break"] = nxt.get("sentence_break", False)
                     merged.append(merged_seg)
                     i += 2
                     changed = True
@@ -390,9 +493,23 @@ def enforce_readability(
     return current_segments
 
 
-def _wrap_two_lines_naive(text: str, max_cpl: int, max_lines: int) -> List[str]:
+def _wrap_two_lines_naive(
+    text: str,
+    max_cpl: int,
+    max_lines: int,
+    preferred_delimiters: Optional[Sequence[str]] = None,
+) -> List[str]:
     txt = text.strip()
-    if max_lines <= 1 or len(txt) <= max_cpl:
+    if max_lines <= 1:
+        return [txt]
+
+    preferred = tuple(preferred_delimiters or ())
+    if preferred:
+        lines = _wrap_with_preferred_delimiters(txt, preferred, max_cpl, max_lines)
+        if lines:
+            return lines
+
+    if len(txt) <= max_cpl:
         return [txt]
 
     if " " in txt:
@@ -423,10 +540,24 @@ def _wrap_two_lines_naive(text: str, max_cpl: int, max_lines: int) -> List[str]:
 
 
 def _wrap_two_lines_token_aware(
-    tokens: Sequence[dict], text: str, max_cpl: int, max_lines: int
+    tokens: Sequence[dict],
+    text: str,
+    max_cpl: int,
+    max_lines: int,
+    preferred_delimiters: Optional[Sequence[str]] = None,
 ) -> List[str]:
-    if max_lines <= 1 or len(text) <= max_cpl:
-        return [text.strip()]
+    stripped = text.strip()
+    if max_lines <= 1:
+        return [stripped]
+
+    preferred = tuple(preferred_delimiters or ())
+    if preferred:
+        lines = _wrap_with_preferred_delimiters(stripped, preferred, max_cpl, max_lines)
+        if lines:
+            return lines
+
+    if len(stripped) <= max_cpl:
+        return [stripped]
 
     safe_after = set()
     for i in range(len(tokens) - 1):
@@ -481,7 +612,7 @@ def _wrap_two_lines_token_aware(
         if len(left_text) <= max_cpl and len(right_text) <= max_cpl:
             return [left_text, right_text]
 
-    return [text.strip()]
+    return [stripped]
 
 
 def tokens_to_subtitle_segments(
@@ -489,7 +620,12 @@ def tokens_to_subtitle_segments(
     config: SubtitleConfig,
 ) -> List[dict]:
     words = tokens_to_words(tokens)
-    segments = build_segments(words, config.gap_ms, config.split_on_speaker)
+    segments = build_segments(
+        words,
+        config.gap_ms,
+        config.split_on_speaker,
+        config.segment_on_sentence,
+    )
     if not segments:
         return []
     segments = enforce_readability(
@@ -499,6 +635,7 @@ def tokens_to_subtitle_segments(
         max_dur=config.max_dur_ms,
         max_chars=config.max_cpl * config.max_lines,
         use_ellipses=config.ellipses,
+        preserve_sentence_breaks=config.segment_on_sentence,
     )
     return segments
 
@@ -518,10 +655,19 @@ def render_segments(
         tokens = seg.get("tokens")
         if tokens:
             lines = _wrap_two_lines_token_aware(
-                tokens, text, config.max_cpl, config.max_lines
+                tokens,
+                text,
+                config.max_cpl,
+                config.max_lines,
+                config.line_split_delimiters,
             )
         else:
-            lines = _wrap_two_lines_naive(text, config.max_cpl, config.max_lines)
+            lines = _wrap_two_lines_naive(
+                text,
+                config.max_cpl,
+                config.max_lines,
+                config.line_split_delimiters,
+            )
         entries.append(
             SubtitleEntry(
                 index=idx,

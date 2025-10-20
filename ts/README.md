@@ -22,7 +22,7 @@ loads `.env` if the environment variable is missing.
 
 **CLI**
 - `npm run cli:transcribe -- --audio ../samples/audio.mp3 --output ../samples/response.json`
-- `npm run cli:to-srt -- --input ../samples/response.json --output subtitles.srt`
+- `npm run cli:to-srt -- --input ../samples/response.json --output subtitles.srt --segment-on-sentence --line-split-delimiters .`
 
 **Library**
 ```ts
@@ -30,7 +30,7 @@ import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile,
 import transcript from "../samples/response.json" assert { type: "json" };
 
 const tokens = transcript.tokens ?? [];
-const config = new SubtitleConfig({ splitOnSpeaker: true });
+const config = new SubtitleConfig({ splitOnSpeaker: true, segmentOnSentence: true, lineSplitDelimiters: ["."] });
 const segments = tokensToSubtitleSegments(tokens, config);
 const entries = renderSegments(segments, config);
 writeSrtFile(entries, "subtitles.srt");

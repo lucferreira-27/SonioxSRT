@@ -28,13 +28,18 @@ describe("CLI", () => {
       "--output",
       output,
       "--max-cpl",
-      "32"
+      "32",
+      "--line-split-delimiters",
+      ".",
+      "--segment-on-sentence"
     ]);
 
     expect(exitCode).toBe(0);
     expect(fs.existsSync(output)).toBe(true);
     const content = fs.readFileSync(output, "utf-8").trim().split(/\r?\n/);
     expect(content[0]).toBe("1");
+    expect(content[2]).toBe("BBC Sounds.");
+    expect(content[6]).toBe("Music, radio, podcasts.");
   });
 
   it("fails when audio file missing", async () => {

@@ -1,6 +1,6 @@
 {
   "name": "sonioxsrt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Soniox async transcription helpers and SRT generation (TypeScript port).",
   "type": "commonjs",
   "main": "dist/index.js",

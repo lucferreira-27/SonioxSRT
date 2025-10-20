@@ -75,6 +75,23 @@ describe("subtitles", () => {
     expect(content[2].length).toBeGreaterThan(0);
   });
 
+  it("splits sentences into distinct segments when configured", () => {
+    const config = new SubtitleConfig({
+      maxCps: 18,
+      maxDurMs: 6000,
+      maxCpl: 42,
+      lineSplitDelimiters: ["."],
+      segmentOnSentence: true
+    });
+    const segments = tokensToSubtitleSegments(tokens, config);
+    const entries = renderSegments(segments, config);
+
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].lines).toEqual(["BBC Sounds."]);
+    expect(entries[1].lines).toEqual(["Music, radio, podcasts."]);
+    expect(entries[2].lines).toEqual(["Oh wow, look at this."]);
+  });
+
   it("rejects transcript without tokens", () => {
     expect(() => extractTokens({ text: "hi" })).toThrowError();
   });

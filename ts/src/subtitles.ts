@@ -19,6 +19,8 @@ export class SubtitleConfig {
   max_cps: number;
   max_cpl: number;
   max_lines: number;
+  line_split_delimiters: string[];
+  segment_on_sentence: boolean;
   split_on_speaker: boolean;
   ellipses: boolean;
 
@@ -29,6 +31,10 @@ export class SubtitleConfig {
     this.max_cps = options.maxCps ?? DEFAULT_MAX_CPS;
     this.max_cpl = options.maxCpl ?? 42;
     this.max_lines = options.maxLines ?? 2;
+    const delimiters = options.lineSplitDelimiters ?? [];
+    const deduped = Array.from(new Set(delimiters.filter((value) => value.trim().length > 0)));
+    this.line_split_delimiters = deduped;
+    this.segment_on_sentence = options.segmentOnSentence ?? false;
     this.split_on_speaker = options.splitOnSpeaker ?? false;
     this.ellipses = options.ellipses ?? false;
   }
@@ -167,7 +173,8 @@ function safeBoundary(prevText: string, nextText: string): boolean {
 export function buildSegments(
   tokens: WordToken[],
   gapThreshold: number,
-  splitOnSpeaker: boolean
+  splitOnSpeaker: boolean,
+  segmentOnSentence: boolean
 ): SubtitleSegment[] {
   const segments: SubtitleSegment[] = [];
   let current: WordToken[] = [];
@@ -175,7 +182,7 @@ export function buildSegments(
   let lastTokenEnd: number | undefined;
   let currentSpeaker: string | null | undefined;
 
-  const closeSegment = (): void => {
+  const closeSegment = (sentenceBreak = false): void => {
     if (current.length === 0) {
       return;
     }
@@ -203,7 +210,8 @@ export function buildSegments(
       start,
       end,
       speaker: speaker ?? null,
-      tokens: [...current]
+      tokens: [...current],
+      sentence_break: sentenceBreak
     });
 
     current = [];
@@ -254,8 +262,20 @@ export function buildSegments(
       currentSpeaker = speaker;
     }
 
-    if (text && isSentenceBreak(text)) {
-      closeSegment();
+    let sentenceBreak = false;
+    if (text) {
+      const trimmed = text.trim();
+      if (trimmed) {
+        if (isSentenceBreak(trimmed)) {
+          sentenceBreak = true;
+        } else if (segmentOnSentence && endsWithSentenceBreak(trimmed)) {
+          sentenceBreak = true;
+        }
+      }
+    }
+
+    if (sentenceBreak) {
+      closeSegment(true);
     }
   }
 
@@ -276,6 +296,115 @@ function segmentText(seg: SubtitleSegment): string {
 
 function charsForCps(text: string): number {
   return text.replace(/\s+/g, "").length;
+}
+
+function endsWithSentenceBreak(text?: string): boolean {
+  if (!text) {
+    return false;
+  }
+  const stripped = text.trim();
+  if (stripped.length === 0) {
+    return false;
+  }
+  const lastChar = stripped[stripped.length - 1];
+  return SENTENCE_ENDERS.has(lastChar);
+}
+
+function splitTextByDelimiters(text: string, delimiters: string[]): string[] {
+  if (!text) {
+    return [];
+  }
+  const cleaned = text.replace(/\n/g, " ");
+  const delimSet = new Set(delimiters.filter((value) => value.length > 0));
+  if (delimSet.size === 0) {
+    const stripped = cleaned.trim();
+    return stripped ? [stripped] : [];
+  }
+  const pieces: string[] = [];
+  let current = "";
+  for (const char of cleaned) {
+    current += char;
+    if (delimSet.has(char)) {
+      const chunk = current.trim();
+      if (chunk.length > 0) {
+        pieces.push(chunk);
+      }
+      current = "";
+    }
+  }
+  const remainder = current.trim();
+  if (remainder.length > 0) {
+    pieces.push(remainder);
+  }
+  return pieces;
+}
+
+function partitionChunks(
+  chunks: string[],
+  maxLines: number,
+  maxCpl: number
+): string[] | null {
+  if (maxLines <= 0) {
+    return [];
+  }
+  if (chunks.length === 0) {
+    return [];
+  }
+
+  const helper = (start: number, remaining: number): string[] | null => {
+    if (start === chunks.length) {
+      return [];
+    }
+    if (remaining === 0) {
+      return null;
+    }
+
+    let line = "";
+    for (let end = start; end < chunks.length; end += 1) {
+      line = line.length > 0 ? `${line} ${chunks[end]}` : chunks[end];
+      if (line.length > maxCpl) {
+        break;
+      }
+      const rest = helper(end + 1, remaining - 1);
+      if (rest !== null) {
+        return [line, ...rest];
+      }
+    }
+    return null;
+  };
+
+  return helper(0, maxLines);
+}
+
+function wrapWithPreferredDelimiters(
+  text: string,
+  delimiters: string[],
+  maxCpl: number,
+  maxLines: number
+): string[] | null {
+  if (maxLines <= 1) {
+    return null;
+  }
+
+  const chunks = splitTextByDelimiters(text, delimiters);
+  if (chunks.length <= 1) {
+    return null;
+  }
+
+  const partition = partitionChunks(chunks, maxLines, maxCpl);
+  if (!partition) {
+    return null;
+  }
+
+  const lines = partition
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length <= 1) {
+    return null;
+  }
+
+  return lines.slice(0, maxLines);
 }
 
 function isSafeAt(tokens: WordToken[], index: number): boolean {
@@ -373,6 +502,7 @@ export function enforceReadability(
 ): SubtitleSegment[] {
   const out: SubtitleSegment[] = [];
   const maxChars = config.max_cpl * config.max_lines;
+  const preserveSentenceBreaks = config.segment_on_sentence;
 
   for (const segment of segments) {
     const queue: SubtitleSegment[] = [segment];
@@ -395,12 +525,16 @@ export function enforceReadability(
         const left: SubtitleSegment = {
           tokens: leftTokens,
           start: leftTokens[0].start_ms ?? start,
-          end: leftTokens[leftTokens.length - 1].end_ms ?? end
+          end: leftTokens[leftTokens.length - 1].end_ms ?? end,
+          speaker: current.speaker ?? null,
+          sentence_break: false
         };
         const right: SubtitleSegment = {
           tokens: rightTokens,
           start: rightTokens[0].start_ms ?? start,
-          end: rightTokens[rightTokens.length - 1].end_ms ?? end
+          end: rightTokens[rightTokens.length - 1].end_ms ?? end,
+          speaker: current.speaker ?? null,
+          sentence_break: Boolean(current.sentence_break)
         };
         if (config.ellipses) {
           left.suffix_ellipsis = true;
@@ -425,6 +559,11 @@ export function enforceReadability(
       const [start, end] = segmentTime(segment);
       const duration = end - start;
       if (duration < config.min_dur_ms && i + 1 < currentSegments.length) {
+        if (preserveSentenceBreaks && segment.sentence_break) {
+          merged.push(segment);
+          i += 1;
+          continue;
+        }
         const next = currentSegments[i + 1];
         const [nStart, nEnd] = segmentTime(next);
         if (nEnd - start <= config.max_dur_ms) {
@@ -435,7 +574,9 @@ export function enforceReadability(
           merged.push({
             tokens: mergedTokens,
             start,
-            end: nEnd
+            end: nEnd,
+            speaker: segment.speaker ?? next.speaker ?? null,
+            sentence_break: Boolean(next.sentence_break)
           });
           i += 2;
           changed = true;
@@ -451,9 +592,30 @@ export function enforceReadability(
   return currentSegments;
 }
 
-function wrapTwoLinesNaive(text: string, maxCpl: number, maxLines: number): string[] {
+function wrapTwoLinesNaive(
+  text: string,
+  maxCpl: number,
+  maxLines: number,
+  preferredDelimiters: string[]
+): string[] {
   const trimmed = text.trim();
-  if (maxLines <= 1 || trimmed.length <= maxCpl) {
+  if (maxLines <= 1) {
+    return [trimmed];
+  }
+
+  if (preferredDelimiters.length > 0) {
+    const lines = wrapWithPreferredDelimiters(
+      trimmed,
+      preferredDelimiters,
+      maxCpl,
+      maxLines
+    );
+    if (lines) {
+      return lines;
+    }
+  }
+
+  if (trimmed.length <= maxCpl) {
     return [trimmed];
   }
 
@@ -498,10 +660,28 @@ function wrapTwoLinesTokenAware(
   tokens: WordToken[],
   text: string,
   maxCpl: number,
-  maxLines: number
+  maxLines: number,
+  preferredDelimiters: string[]
 ): string[] {
-  if (maxLines <= 1 || text.length <= maxCpl) {
-    return [text.trim()];
+  const stripped = text.trim();
+  if (maxLines <= 1) {
+    return [stripped];
+  }
+
+  if (preferredDelimiters.length > 0) {
+    const lines = wrapWithPreferredDelimiters(
+      stripped,
+      preferredDelimiters,
+      maxCpl,
+      maxLines
+    );
+    if (lines) {
+      return lines;
+    }
+  }
+
+  if (stripped.length <= maxCpl) {
+    return [stripped];
   }
 
   const safeAfter = new Set<number>();
@@ -569,7 +749,7 @@ function wrapTwoLinesTokenAware(
     }
   }
 
-  return [text.trim()];
+  return [stripped];
 }
 
 export function extractTokens(transcript: Transcript): Token[] {
@@ -581,7 +761,12 @@ export function extractTokens(transcript: Transcript): Token[] {
 
 export function tokensToSubtitleSegments(tokens: Token[], config: SubtitleConfig): SubtitleSegment[] {
   const words = tokensToWords(tokens);
-  const segments = buildSegments(words, config.gap_ms, config.split_on_speaker);
+  const segments = buildSegments(
+    words,
+    config.gap_ms,
+    config.split_on_speaker,
+    config.segment_on_sentence
+  );
   if (segments.length === 0) {
     return [];
   }
@@ -608,10 +793,16 @@ export function renderSegments(
         tokens,
         text,
         config.max_cpl,
-        config.max_lines
+        config.max_lines,
+        config.line_split_delimiters
       );
     } else {
-      lines = wrapTwoLinesNaive(text, config.max_cpl, config.max_lines);
+      lines = wrapTwoLinesNaive(
+        text,
+        config.max_cpl,
+        config.max_lines,
+        config.line_split_delimiters
+      );
     }
 
     entries.push({

@@ -71,6 +71,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of lines per subtitle (default: 2).",
     )
     parser.add_argument(
+        "--line-split-delimiters",
+        default="",
+        help=(
+            "Prefer splitting subtitle lines after these characters when wrapping. "
+            "Example: '.' or '.!?'."
+        ),
+    )
+    parser.add_argument(
+        "--segment-on-sentence",
+        action="store_true",
+        help="End subtitle entries at sentence-ending punctuation even without long silences.",
+    )
+    parser.add_argument(
         "--split-on-speaker",
         action="store_true",
         help="Start a new subtitle on speaker changes.",
@@ -107,6 +120,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(exc, file=sys.stderr)
         return 1
 
+    line_split_delimiters = tuple(
+        ch for ch in args.line_split_delimiters if not ch.isspace()
+    )
+
     config = SubtitleConfig(
         gap_ms=args.gap_ms,
         min_dur_ms=args.min_dur_ms,
@@ -114,6 +131,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_cps=args.max_cps,
         max_cpl=args.max_cpl,
         max_lines=args.max_lines,
+        line_split_delimiters=line_split_delimiters,
+        segment_on_sentence=args.segment_on_sentence,
         split_on_speaker=args.split_on_speaker,
         ellipses=args.ellipses,
     )

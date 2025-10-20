@@ -23,6 +23,7 @@ export interface SubtitleSegment {
   text?: string;
   prefix_ellipsis?: boolean;
   suffix_ellipsis?: boolean;
+  sentence_break?: boolean;
   [key: string]: unknown;
 }
 
@@ -40,6 +41,8 @@ export interface SubtitleConfigOptions {
   maxCps?: number;
   maxCpl?: number;
   maxLines?: number;
+  lineSplitDelimiters?: string[];
+  segmentOnSentence?: boolean;
   splitOnSpeaker?: boolean;
   ellipses?: boolean;
 }

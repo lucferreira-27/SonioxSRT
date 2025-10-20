@@ -33,6 +33,8 @@ place `SONIOX_API_KEY=...` inside a `.env` file in the repository root.
 |  | `--max-cps` | Max characters per second | `17` |
 |  | `--max-cpl` | Max characters per line | `42` |
 |  | `--max-lines` | Max lines per subtitle | `2` |
+|  | `--line-split-delimiters` | Preferred characters for intra-caption line breaks | — |
+|  | `--segment-on-sentence` | Force new subtitles after sentence-ending punctuation | `False` |
 |  | `--split-on-speaker` | Break on speaker change | `False` |
 |  | `--ellipses` | Use ellipses for continued sentences | `False` |
 

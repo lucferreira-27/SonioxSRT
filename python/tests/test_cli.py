@@ -18,6 +18,9 @@ def test_to_srt_cli_main(tmp_path: Path, sample_transcript_path: Path) -> None:
             str(output_path),
             "--max-cpl",
             "32",
+            "--line-split-delimiters",
+            ".",
+            "--segment-on-sentence",
         ]
     )
 
@@ -25,6 +28,8 @@ def test_to_srt_cli_main(tmp_path: Path, sample_transcript_path: Path) -> None:
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8").strip().splitlines()
     assert content[0] == "1"
+    assert content[2] == "BBC Sounds."
+    assert content[6] == "Music, radio, podcasts."
 
 
 def test_transcribe_cli_requires_audio_file(tmp_path: Path) -> None:

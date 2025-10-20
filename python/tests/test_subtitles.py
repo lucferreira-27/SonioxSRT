@@ -55,6 +55,27 @@ def test_render_segments_and_write_srt(tmp_path: Path, sample_tokens):
     assert content[2], "Subtitle text should not be empty."
 
 
+def test_render_segments_prefer_sentence_split(sample_tokens):
+    config = SubtitleConfig(
+        max_cps=18.0,
+        max_dur_ms=6000,
+        max_cpl=42,
+        line_split_delimiters=(".",),
+        segment_on_sentence=True,
+    )
+    segments = tokens_to_subtitle_segments(sample_tokens, config)
+    entries = render_segments(segments, config)
+
+    assert entries, "Rendered entries should not be empty."
+    first = entries[0]
+    assert first.lines == ["BBC Sounds."]
+
+    second = entries[1]
+    assert second.lines == ["Music, radio, podcasts."]
+
+    third = entries[2]
+    assert third.lines == ["Oh wow, look at this."]
+
 def test_extract_tokens_rejects_missing_tokens(tmp_path: Path):
     bad_json_path = tmp_path / "bad.json"
     bad_json_path.write_text('{"text": "hi"}', encoding="utf-8")

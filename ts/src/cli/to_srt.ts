@@ -48,6 +48,16 @@ function buildCommand(): Command {
       (value) => parseInt(value, 10),
       DEFAULT_CONFIG.max_lines
     )
+    .option(
+      "--line-split-delimiters <chars>",
+      "Prefer splitting subtitle lines after these characters when wrapping.",
+      ""
+    )
+    .option(
+      "--segment-on-sentence",
+      "End subtitle entries at sentence-ending punctuation even without long silences.",
+      false
+    )
     .option("--split-on-speaker", "Start a new subtitle on speaker changes.", false)
     .option("--ellipses", "Use ellipses (…) to mark continued sentences.", false);
   return program;
@@ -67,6 +77,8 @@ async function main(argv: string[]): Promise<number> {
       maxCps: number;
       maxCpl: number;
       maxLines: number;
+      lineSplitDelimiters: string;
+      segmentOnSentence: boolean;
       splitOnSpeaker: boolean;
       ellipses: boolean;
     }>();
@@ -76,6 +88,11 @@ async function main(argv: string[]): Promise<number> {
       throw new Error(`Input file not found: ${inputPath}`);
     }
 
+    const lineSplitDelimiters = (options.lineSplitDelimiters ?? "")
+      .split("")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
     const config = new SubtitleConfig({
       gapMs: options.gapMs,
       minDurMs: options.minDurMs,
@@ -83,6 +100,8 @@ async function main(argv: string[]): Promise<number> {
       maxCps: options.maxCps,
       maxCpl: options.maxCpl,
       maxLines: options.maxLines,
+      lineSplitDelimiters,
+      segmentOnSentence: options.segmentOnSentence,
       splitOnSpeaker: options.splitOnSpeaker,
       ellipses: options.ellipses
     });
