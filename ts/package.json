@@ -1,5 +1,5 @@
 {
-  "name": "@lucfe/sonioxsrt",
+  "name": "sonioxsrt",
   "version": "0.1.0",
   "description": "Soniox async transcription helpers and SRT generation (TypeScript port).",
   "type": "commonjs",

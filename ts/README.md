@@ -7,7 +7,7 @@ generation utilities.
 
 **Installation**
 ```sh
-npm install @lucfe/sonioxsrt
+npm install sonioxsrt
 ```
 
 **Local Development**
@@ -26,7 +26,7 @@ loads `.env` if the environment variable is missing.
 
 **Library**
 ```ts
-import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile, srt } from "@lucfe/sonioxsrt";
+import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile, srt } from "sonioxsrt";
 import transcript from "../samples/response.json" assert { type: "json" };
 
 const tokens = transcript.tokens ?? [];
