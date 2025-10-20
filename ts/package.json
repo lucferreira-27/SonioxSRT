@@ -1,5 +1,5 @@
 {
-  "name": "@soniox/srt",
+  "name": "@lucfe/sonioxsrt",
   "version": "0.1.0",
   "description": "Soniox async transcription helpers and SRT generation (TypeScript port).",
   "type": "commonjs",
@@ -15,6 +15,20 @@
     "cli:to-srt": "ts-node src/cli/to_srt.ts",
     "prepare": "npm run build"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lucferreira-27/SonioxSRT.git",
+    "directory": "ts"
+  },
+  "homepage": "https://github.com/lucferreira-27/SonioxSRT#readme",
+  "bugs": {
+    "url": "https://github.com/lucferreira-27/SonioxSRT/issues"
+  },
   "keywords": [
     "soniox",
     "speech-to-text",
@@ -22,8 +36,9 @@
     "srt",
     "typescript"
   ],
-  "author": "",
+  "author": "lucfe <lucferreira-27>",
   "license": "MIT",
+  "private": false,
   "dependencies": {
     "axios": "^1.7.7",
     "commander": "^12.1.0",

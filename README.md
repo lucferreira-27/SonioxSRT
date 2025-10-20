@@ -37,10 +37,10 @@ print("SRT ready at subtitles.srt")
 
 **TypeScript**
 ```ts
-import { srt } from "@soniox/srt";
+import { srt } from "@lucfe/sonioxsrt";
 
 // Convert the shared sample transcript into subtitles
-await srt("../samples/response.json", "subtitles.srt");
+srt("../samples/response.json", "subtitles.srt");
 console.log("SRT ready at subtitles.srt");
 ```
 

@@ -3,9 +3,14 @@
 **Purpose**: TypeScript port of the Soniox async transcription helpers and SRT
 generation utilities.
 
-**Prerequisites**: Node.js 18+ (or any modern runtime with fetch/FormData support).
+**Prerequisites**: Node.js 18+ (or compatible runtime)
 
 **Installation**
+```sh
+npm install @lucfe/sonioxsrt
+```
+
+**Local Development**
 ```sh
 cd ts
 npm install
@@ -21,7 +26,7 @@ loads `.env` if the environment variable is missing.
 
 **Library**
 ```ts
-import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile, srt } from "@soniox/srt";
+import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile, srt } from "@lucfe/sonioxsrt";
 import transcript from "../samples/response.json" assert { type: "json" };
 
 const tokens = transcript.tokens ?? [];
