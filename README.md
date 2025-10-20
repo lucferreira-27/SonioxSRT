@@ -1,4 +1,4 @@
-# SonioxSRT Monorepo
+# SonioxSRT
 
 SonioxSRT provides helper libraries and CLIs for working with the Soniox async
 transcription API and generating SRT subtitles. This repository now hosts
@@ -20,18 +20,3 @@ documentation.
 
 Both implementations look for a `SONIOX_API_KEY` environment variable and fall
 back to loading `.env` files located at the repository root.
-
-## Contributing
-
-1. Fork and clone the repository.
-2. Run the language-specific test suites (`python/README.md` and
-   `ts/README.md` outline the commands).
-3. Keep shared fixtures in `samples/` in sync so cross-language tests remain
-   deterministic.
-4. Update documentation and changelog entries when you add or modify features.
-
-## Continuous Integration
-
-GitHub Actions executes both the Python and TypeScript test suites on every
-push and pull request. See [`.github/workflows/tests.yml`](.github/workflows/tests.yml)
-for details.
