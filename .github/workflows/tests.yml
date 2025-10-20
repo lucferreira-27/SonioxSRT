@@ -8,20 +8,46 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [python, typescript]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: matrix.language == 'python'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
+        if: matrix.language == 'python'
         run: |
+          cd python
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
-      - name: Run tests
+      - name: Run Python tests
+        if: matrix.language == 'python'
         run: |
+          cd python
           python -m pytest
+
+      - name: Set up Node.js
+        if: matrix.language == 'typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install TypeScript dependencies
+        if: matrix.language == 'typescript'
+        run: |
+          cd ts
+          npm install
+
+      - name: Run TypeScript tests
+        if: matrix.language == 'typescript'
+        run: |
+          cd ts
+          npm test

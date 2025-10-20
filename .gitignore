@@ -1,11 +1,19 @@
 # Python virtual environments
 .venv/
+python/.venv/
 
 # Compiled bytecode caches
 __pycache__/
+python/__pycache__/
 
 # Pytest cache
 .pytest_cache/
+python/.pytest_cache/
 
 # Local environment configuration
 .env
+
+# TypeScript build artifacts
+ts/node_modules/
+ts/dist/
+ts/.tsbuildinfo

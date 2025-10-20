@@ -14,7 +14,7 @@ def project_root() -> Path:
 
 @pytest.fixture(scope="session")
 def sample_transcript_path(project_root: Path) -> Path:
-    return project_root / "samples" / "response.json"
+    return project_root.parent / "samples" / "response.json"
 
 
 @pytest.fixture(scope="session")

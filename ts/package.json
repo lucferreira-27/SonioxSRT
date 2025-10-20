@@ -1,0 +1,44 @@
+{
+  "name": "@soniox/srt",
+  "version": "0.1.0",
+  "description": "Soniox async transcription helpers and SRT generation (TypeScript port).",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cli:transcribe": "ts-node src/cli/transcribe.ts",
+    "cli:to-srt": "ts-node src/cli/to_srt.ts",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "soniox",
+    "speech-to-text",
+    "transcription",
+    "srt",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@typescript-eslint/parser": "^8.10.0",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.3"
+  }
+}
