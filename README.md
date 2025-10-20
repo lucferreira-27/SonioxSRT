@@ -1,22 +1,69 @@
 # SonioxSRT
 
 SonioxSRT provides helper libraries and CLIs for working with the Soniox async
-transcription API and generating SRT subtitles. This repository now hosts
-parallel implementations in Python and TypeScript that share common samples and
-documentation.
+transcription API and generating SRT subtitles. The repository hosts parallel
+implementations in Python and TypeScript that share common samples and tests.
 
-## Layout
+## Repository Layout
 
-- `python/` – original Python implementation, CLI tools, and pytest suite.
-- `ts/` – TypeScript port with equivalent API surface, CLIs, and Vitest suite.
-- `samples/` – shared audio and transcript fixtures used by both languages.
+- `python/` – Python package, CLI entry points, and pytest suite.
+- `ts/` – TypeScript port with equivalent APIs, CLIs, and Vitest coverage.
+- `samples/` – Shared audio/transcript fixtures used by both stacks.
 
-## Getting Started
+## Quick Start
 
-- **Python users:** head to [`python/README.md`](python/README.md) for setup,
-  CLI usage, and library examples.
-- **TypeScript users:** see [`ts/README.md`](ts/README.md) for npm installation,
-  CLI commands, and API usage in Node.js projects.
+1. Export your Soniox API key (or add it to a `.env` file in the repo root):
+   ```sh
+   export SONIOX_API_KEY=<YOUR_API_KEY>
+   ```
+2. Pick the language you want to use:
+   - Python instructions live in [`python/README.md`](python/README.md).
+   - TypeScript instructions live in [`ts/README.md`](ts/README.md).
 
-Both implementations look for a `SONIOX_API_KEY` environment variable and fall
-back to loading `.env` files located at the repository root.
+Both implementations load the shared fixtures from `samples/` and expose CLIs for
+transcribing audio and emitting SRT files.
+
+### Basic Usage
+
+**Python**
+```python
+from pathlib import Path
+from sonioxsrt import srt
+
+# Convert the shared sample transcript into subtitles
+srt(Path("../samples/response.json"), output_path="subtitles.srt")
+print("SRT ready at subtitles.srt")
+```
+
+**TypeScript**
+```ts
+import { srt } from "@soniox/srt";
+
+// Convert the shared sample transcript into subtitles
+await srt("../samples/response.json", "subtitles.srt");
+console.log("SRT ready at subtitles.srt");
+```
+
+## Testing Locally
+
+- **Python**
+  ```sh
+  cd python
+  python3 -m venv .venv
+  . .venv/bin/activate
+  python -m pip install -r requirements-dev.txt
+  python -m pytest
+  ```
+
+- **TypeScript**
+  ```sh
+  cd ts
+  npm install
+  npm test
+  ```
+
+## Continuous Integration
+
+GitHub Actions runs both the Python and TypeScript suites on every push and pull
+request. The workflow definition lives at
+[`./.github/workflows/tests.yml`](.github/workflows/tests.yml).
