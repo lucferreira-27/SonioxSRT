@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Iterable, Optional, Sequence
 
 try:
     import requests
@@ -23,15 +24,68 @@ class SonioxError(Exception):
     """Raised when the Soniox API returns an unexpected status or payload."""
 
 
-def require_api_key(env_var: str = "SONIOX_API_KEY") -> str:
+def _load_env_file(path: Path) -> None:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover
+        return
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+def _candidate_env_paths(extra_paths: Optional[Sequence[Path]]) -> Iterable[Path]:
+    seen: set[Path] = set()
+    if extra_paths:
+        for p in extra_paths:
+            resolved = Path(p).resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                yield resolved
+
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.resolve() not in seen:
+        seen.add(cwd_env.resolve())
+        yield cwd_env
+
+    package_root = Path(__file__).resolve().parents[1]
+    for candidate in (
+        package_root / ".env",
+        package_root.parent / ".env",
+    ):
+        resolved = candidate.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            yield candidate
+
+
+def require_api_key(
+    env_var: str = "SONIOX_API_KEY",
+    *,
+    search_paths: Optional[Sequence[Path]] = None,
+) -> str:
     """Fetch the Soniox API key from the environment or exit with instructions."""
     api_key = os.environ.get(env_var)
     if not api_key:
-        raise SystemExit(
-            f"{env_var} is not set.\n"
-            "Create an API key in the Soniox Console and export it:\n"
-            f"  export {env_var}=<YOUR_API_KEY>"
-        )
+        for env_path in _candidate_env_paths(search_paths):
+            if env_path.is_file():
+                _load_env_file(env_path)
+                api_key = os.environ.get(env_var)
+                if api_key:
+                    break
+        if not api_key:
+            raise SystemExit(
+                f"{env_var} is not set.\n"
+                "Create an API key in the Soniox Console and export it:\n"
+                f"  export {env_var}=<YOUR_API_KEY>"
+            )
     return api_key
 
 

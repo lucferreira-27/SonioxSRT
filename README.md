@@ -6,7 +6,7 @@
 - https://soniox.com/docs/stt/async/async-transcription.mdx
 - https://soniox.com/docs/stt/get-started.mdx
 
-**API Key**: `export SONIOX_API_KEY=<YOUR_API_KEY>` before running any commands.
+**API Key**: `export SONIOX_API_KEY=<YOUR_API_KEY>` before running any commands, or place `SONIOX_API_KEY=...` inside a `.env` file in the project root.
 
 **Samples**: `samples/audio.mp3` (input) and `samples/response.json` (ground truth transcript).
 
