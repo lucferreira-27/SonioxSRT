@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -82,8 +83,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_logging() -> None:
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    else:
+        root.setLevel(logging.INFO)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
+    _configure_logging()
     args = parser.parse_args(argv)
 
     input_path = Path(args.input)

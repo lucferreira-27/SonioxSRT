@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple, Union
@@ -15,6 +16,8 @@ DEFAULT_MAX_DUR_MS = 7000
 DEFAULT_MAX_CPS = 17.0
 
 PUNCT = set(".,!?;:–—-…")
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -548,7 +551,9 @@ def srt(
         config = SubtitleConfig()
 
     if isinstance(transcript, (str, Path)):
-        data = json.loads(Path(transcript).read_text(encoding="utf-8"))
+        path = Path(transcript)
+        LOGGER.info("Loading transcript from %s", path)
+        data = json.loads(path.read_text(encoding="utf-8"))
     else:
         data = transcript
 
@@ -559,6 +564,7 @@ def srt(
 
     entries = render_segments(segments, config)
     output_path = Path(output_path)
+    LOGGER.info("Writing %d subtitles to %s", len(entries), output_path)
     write_srt_file(entries, output_path)
     return output_path
 
