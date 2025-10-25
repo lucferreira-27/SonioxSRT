@@ -17,3 +17,6 @@ python/.pytest_cache/
 ts/node_modules/
 ts/dist/
 ts/.tsbuildinfo
+
+audio-2.mp3
+audio-jp.*

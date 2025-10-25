@@ -8,6 +8,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
+try:  # Optional dependency for loading environment variables from .env files
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - handled at runtime if dependency missing
+    load_dotenv = None
+
 try:
     import requests
 except ModuleNotFoundError as exc:  # pragma: no cover
@@ -25,6 +30,9 @@ class SonioxError(Exception):
 
 
 def _load_env_file(path: Path) -> None:
+    if load_dotenv is not None:
+        load_dotenv(dotenv_path=path, override=False)
+        return
     try:
         content = path.read_text(encoding="utf-8")
     except OSError:  # pragma: no cover

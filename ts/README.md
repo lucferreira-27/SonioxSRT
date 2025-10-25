@@ -26,7 +26,14 @@ loads `.env` if the environment variable is missing.
 
 **Library**
 ```ts
-import { SubtitleConfig, tokensToSubtitleSegments, renderSegments, writeSrtFile, srt } from "sonioxsrt";
+import {
+  SubtitleConfig,
+  tokensToSubtitleSegments,
+  renderSegments,
+  writeSrtFile,
+  srt,
+  runRealtimeSession
+} from "sonioxsrt";
 import transcript from "../samples/response.json" assert { type: "json" };
 
 const tokens = transcript.tokens ?? [];
@@ -37,6 +44,15 @@ writeSrtFile(entries, "subtitles.srt");
 
 // Or rely on the convenience helper:
 srt("../samples/response.json", "subtitles.srt");
+
+// Stream audio via the realtime WebSocket API (requires `npm install ws` at runtime).
+const realtime = await runRealtimeSession({
+  audioPath: "../samples/audio.mp3",
+  model: "stt-rt-preview-v2",
+  languageHints: ["en"],
+  enableLanguageIdentification: true
+});
+console.log(realtime.text);
 ```
 
 **Testing**

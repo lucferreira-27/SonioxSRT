@@ -6,18 +6,31 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
 
-SENTENCE_ENDERS = {"。", ".", "！", "!", "？", "?"}
-MINOR_BREAKERS = {",", ";", ":", "、", "—", "–", "-"}
+SENTENCE_ENDERS = {"。", "｡", ".", "．", "！", "!", "？", "?"}
+MINOR_BREAKERS = {",", "，", ";", "；", ":", "：", "、", "—", "–", "-", "･"}
 DEFAULT_GAP_MS = 1200
 DEFAULT_MIN_DUR_MS = 1000
 DEFAULT_MAX_DUR_MS = 7000
 DEFAULT_MAX_CPS = 17.0
 
-PUNCT = set(".,!?;:–—-…")
+PUNCT = set(".,!?;:–—-…，；：｡．･")
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _contains_cjk(text: str) -> bool:
+    for ch in text:
+        code = ord(ch)
+        if (
+            0x3040 <= code <= 0x30FF  # Hiragana + Katakana
+            or 0x3400 <= code <= 0x4DBF  # CJK Extension A
+            or 0x4E00 <= code <= 0x9FFF  # CJK Unified
+            or 0xF900 <= code <= 0xFAFF  # CJK Compatibility
+        ):
+            return True
+    return False
 
 
 @dataclass
@@ -29,7 +42,7 @@ class SubtitleConfig:
     max_cpl: int = 42
     max_lines: int = 2
     line_split_delimiters: Tuple[str, ...] = ()
-    segment_on_sentence: bool = False
+    segment_on_sentence: bool = True
     split_on_speaker: bool = False
     ellipses: bool = False
 
@@ -44,8 +57,64 @@ class SubtitleEntry:
 
 def extract_tokens(transcript: dict) -> List[dict]:
     tokens = transcript.get("tokens")
-    if not isinstance(tokens, list) or not tokens:
-        raise ValueError("No tokens found in transcript.")
+    if isinstance(tokens, list) and tokens:
+        return tokens
+
+    nested_tokens = _collect_nested_tokens(
+        transcript,
+        skip_immediate=True,
+    )
+    if nested_tokens:
+        return nested_tokens
+
+    raise ValueError("No tokens found in transcript.")
+
+
+def _collect_nested_tokens(
+    value: Union[dict, Iterable[Any], None],
+    *,
+    skip_immediate: bool = False,
+) -> List[dict]:
+    if value is None:
+        return []
+
+    tokens: List[dict] = []
+
+    def _collect_from_iterable(items: Iterable[Any]) -> None:
+        for item in items:
+            tokens.extend(
+                _collect_nested_tokens(item, skip_immediate=False)
+            )
+
+    if isinstance(value, list):
+        if value and all(isinstance(item, dict) and "text" in item for item in value):
+            tokens.extend(value)
+        else:
+            _collect_from_iterable(value)
+        return tokens
+
+    if isinstance(value, dict):
+        if not skip_immediate:
+            direct = value.get("tokens")
+            if isinstance(direct, list) and direct:
+                tokens.extend(direct)
+        for key in (
+            "alternatives",
+            "segments",
+            "paragraphs",
+            "turns",
+            "entries",
+            "results",
+            "items",
+        ):
+            nested = value.get(key)
+            if nested:
+                tokens.extend(
+                    _collect_nested_tokens(
+                        nested,
+                        skip_immediate=False,
+                    )
+                )
     return tokens
 
 
@@ -124,13 +193,23 @@ def tokens_to_words(tokens: Sequence[dict]) -> List[dict]:
             add_to_current(clean)
             cur_tokens[-1]["_prefix_space"] = True
         else:
-            if is_punct and cur_tokens:
-                add_to_current(clean)
-            else:
-                if not cur_tokens:
+            if cur_tokens:
+                if is_punct:
+                    add_to_current(clean)
+                elif _contains_cjk(clean) and _contains_cjk("".join(cur_text_parts)):
+                    flush()
                     add_to_current(clean)
                 else:
                     add_to_current(clean)
+            else:
+                add_to_current(clean)
+
+        if clean and (
+            _ends_with_sentence_break(clean)
+            or clean[-1] in MINOR_BREAKERS
+            or _contains_cjk(clean) and len(clean) == 1
+        ):
+            flush()
 
     if cur_tokens:
         flush()

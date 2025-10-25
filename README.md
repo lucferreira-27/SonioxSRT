@@ -28,20 +28,31 @@ transcribing audio and emitting SRT files.
 **Python**
 ```python
 from pathlib import Path
-from sonioxsrt import srt
+from sonioxsrt import srt, run_realtime_session
 
 # Convert the shared sample transcript into subtitles
 srt(Path("../samples/response.json"), output_path="subtitles.srt")
 print("SRT ready at subtitles.srt")
+
+# Stream audio using the realtime model (requires `pip install websockets`)
+session = run_realtime_session("../samples/audio.mp3", model="stt-rt-preview-v2")
+print(session.text)
 ```
 
 **TypeScript**
 ```ts
-import { srt } from "sonioxsrt";
+import { srt, runRealtimeSession } from "sonioxsrt";
 
 // Convert the shared sample transcript into subtitles
 srt("../samples/response.json", "subtitles.srt");
 console.log("SRT ready at subtitles.srt");
+
+// Realtime transcription (requires the optional `ws` dependency)
+const session = await runRealtimeSession({
+  audioPath: "../samples/audio.mp3",
+  model: "stt-rt-preview-v2"
+});
+console.log(session.text);
 ```
 
 ## Testing Locally

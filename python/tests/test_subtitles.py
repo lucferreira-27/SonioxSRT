@@ -76,6 +76,33 @@ def test_render_segments_prefer_sentence_split(sample_tokens):
     third = entries[2]
     assert third.lines == ["Oh wow, look at this."]
 
+
+def test_render_segments_handles_halfwidth_japanese_period():
+    tokens = [
+        {"text": "ただいま", "start_ms": 0, "end_ms": 400},
+        {"text": "｡", "start_ms": 400, "end_ms": 420},
+        {"text": " おかえり", "start_ms": 600, "end_ms": 900},
+        {"text": "｡", "start_ms": 900, "end_ms": 920},
+    ]
+    config = SubtitleConfig(segment_on_sentence=True)
+    segments = tokens_to_subtitle_segments(tokens, config)
+    entries = render_segments(segments, config)
+
+    assert [entry.lines[0] for entry in entries[:2]] == ["ただいま｡", "おかえり｡"]
+
+
+def test_render_segments_splits_when_punctuation_embedded():
+    tokens = [
+        {"text": "女体化する。", "start_ms": 0, "end_ms": 500},
+        {"text": "変化が", "start_ms": 600, "end_ms": 900},
+        {"text": "始まる。", "start_ms": 900, "end_ms": 1200},
+    ]
+    config = SubtitleConfig(segment_on_sentence=True)
+    segments = tokens_to_subtitle_segments(tokens, config)
+    entries = render_segments(segments, config)
+
+    assert [entry.lines[0] for entry in entries] == ["女体化する。", "変化が始まる。"]
+
 def test_extract_tokens_rejects_missing_tokens(tmp_path: Path):
     bad_json_path = tmp_path / "bad.json"
     bad_json_path.write_text('{"text": "hi"}', encoding="utf-8")
@@ -84,6 +111,33 @@ def test_extract_tokens_rejects_missing_tokens(tmp_path: Path):
 
     with pytest.raises(ValueError):
         extract_tokens(json.loads(bad_json_path.read_text(encoding="utf-8")))
+
+
+def test_extract_tokens_from_nested_transcript():
+    transcript = {
+        "type": "realtime",
+        "segments": [
+            {
+                "speaker": "A",
+                "tokens": [
+                    {"text": "Hello", "start_ms": 0, "end_ms": 400},
+                    {"text": " world", "start_ms": 400, "end_ms": 800},
+                ],
+            },
+            {
+                "alternatives": [
+                    {
+                        "tokens": [
+                            {"text": "!", "start_ms": 800, "end_ms": 900},
+                        ]
+                    }
+                ]
+            },
+        ],
+    }
+
+    tokens = extract_tokens(transcript)
+    assert [token["text"] for token in tokens] == ["Hello", " world", "!"]
 
 
 def test_srt_from_dict(tmp_path: Path, sample_transcript):

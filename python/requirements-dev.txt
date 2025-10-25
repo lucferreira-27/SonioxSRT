@@ -1,2 +1,5 @@
 pytest
+python-dotenv
+openai
 requests
+websockets>=11

@@ -92,8 +92,60 @@ describe("subtitles", () => {
     expect(entries[2].lines).toEqual(["Oh wow, look at this."]);
   });
 
+  it("segments on halfwidth Japanese punctuation", () => {
+    const japaneseTokens = [
+      { text: "ただいま", start_ms: 0, end_ms: 400 },
+      { text: "｡", start_ms: 400, end_ms: 420 },
+      { text: " おかえり", start_ms: 600, end_ms: 900 },
+      { text: "｡", start_ms: 900, end_ms: 920 }
+    ];
+    const config = new SubtitleConfig({ segmentOnSentence: true });
+    const segments = tokensToSubtitleSegments(japaneseTokens, config);
+    const entries = renderSegments(segments, config);
+
+    expect(entries.slice(0, 2).map((entry) => entry.lines[0])).toEqual(["ただいま｡", "おかえり｡"]);
+  });
+
+  it("segments when punctuation is embedded in the token", () => {
+    const japaneseTokens = [
+      { text: "女体化する。", start_ms: 0, end_ms: 400 },
+      { text: "変化が", start_ms: 500, end_ms: 800 },
+      { text: "始まる。", start_ms: 810, end_ms: 1100 }
+    ];
+    const config = new SubtitleConfig({ segmentOnSentence: true });
+    const segments = tokensToSubtitleSegments(japaneseTokens, config);
+    const entries = renderSegments(segments, config);
+
+    expect(entries.map((entry) => entry.lines[0])).toEqual(["女体化する。", "変化が始まる。"]);
+  });
+
   it("rejects transcript without tokens", () => {
     expect(() => extractTokens({ text: "hi" })).toThrowError();
+  });
+
+  it("pulls tokens from nested transcript structures", () => {
+    const nested: Transcript = {
+      type: "realtime",
+      segments: [
+        {
+          speaker: "A",
+          tokens: [
+            { text: "Hello", start_ms: 0, end_ms: 400 },
+            { text: " world", start_ms: 400, end_ms: 800 }
+          ]
+        },
+        {
+          alternatives: [
+            {
+              tokens: [{ text: "!", start_ms: 800, end_ms: 900 }]
+            }
+          ]
+        }
+      ]
+    } as unknown as Transcript;
+
+    const flattened = extractTokens(nested);
+    expect(flattened.map((token) => token.text)).toEqual(["Hello", " world", "!"]);
   });
 
   it("writes srt from dict", () => {

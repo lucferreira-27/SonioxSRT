@@ -2,15 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { Token, Transcript, SubtitleEntry, SubtitleConfigOptions, SubtitleSegment } from "./types";
 
-const SENTENCE_ENDERS = new Set(["。", ".", "！", "!", "？", "?"]);
-const MINOR_BREAKERS = new Set([",", ";", ":", "、", "—", "–", "-"]);
+const SENTENCE_ENDERS = new Set(["。", "｡", ".", "．", "！", "!", "？", "?"]);
+const MINOR_BREAKERS = new Set([",", "，", ";", "；", ":", "：", "、", "—", "–", "-", "･"]);
 
 export const DEFAULT_GAP_MS = 1200;
 export const DEFAULT_MIN_DUR_MS = 1000;
 export const DEFAULT_MAX_DUR_MS = 7000;
 export const DEFAULT_MAX_CPS = 17;
 
-const PUNCT = new Set([".", ",", "!", "?", ";", ":", "–", "—", "-", "…"]);
+const PUNCT = new Set([".", ",", "!", "?", ";", ":", "–", "—", "-", "…", "，", "；", "：", "｡", "．", "･"]);
 
 export class SubtitleConfig {
   gap_ms: number;
@@ -38,6 +38,24 @@ export class SubtitleConfig {
     this.split_on_speaker = options.splitOnSpeaker ?? false;
     this.ellipses = options.ellipses ?? false;
   }
+}
+
+function containsCjk(text: string): boolean {
+  for (const char of text) {
+    const code = char.codePointAt(0);
+    if (!code) {
+      continue;
+    }
+    if (
+      (code >= 0x3040 && code <= 0x30ff) || // Hiragana + Katakana
+      (code >= 0x3400 && code <= 0x4dbf) || // CJK Extension A
+      (code >= 0x4e00 && code <= 0x9fff) || // CJK Unified
+      (code >= 0xf900 && code <= 0xfaff)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function formatTimestamp(ms: number): string {
@@ -139,14 +157,33 @@ function tokensToWords(tokens: Token[]): WordToken[] {
     if (startsSpace) {
       flush();
       addToCurrent(clean, true);
-    } else if (isPunct && currentTokens.length > 0) {
-      addToCurrent(clean);
     } else {
-      if (currentTokens.length === 0) {
-        addToCurrent(clean);
+      if (currentTokens.length > 0) {
+        if (isPunct) {
+          addToCurrent(clean);
+        } else if (
+          containsCjk(clean) &&
+          containsCjk(currentText.join(""))
+        ) {
+          flush();
+          addToCurrent(clean);
+        } else {
+          addToCurrent(clean);
+        }
       } else {
         addToCurrent(clean);
       }
+    }
+
+    if (
+      clean.length > 0 &&
+      (
+        SENTENCE_ENDERS.has(clean.at(-1) ?? "") ||
+        MINOR_BREAKERS.has(clean.at(-1) ?? "") ||
+        (containsCjk(clean) && clean.length === 1)
+      )
+    ) {
+      flush();
     }
   }
 
@@ -753,10 +790,72 @@ function wrapTwoLinesTokenAware(
 }
 
 export function extractTokens(transcript: Transcript): Token[] {
-  if (!Array.isArray(transcript.tokens) || transcript.tokens.length === 0) {
-    throw new Error("No tokens found in transcript.");
+  if (Array.isArray(transcript.tokens) && transcript.tokens.length > 0) {
+    return transcript.tokens as Token[];
   }
-  return transcript.tokens as Token[];
+
+  const nested = collectTokens(transcript, true);
+  if (nested.length > 0) {
+    return nested;
+  }
+
+  throw new Error("No tokens found in transcript.");
+}
+
+const NESTED_TOKEN_KEYS = [
+  "alternatives",
+  "segments",
+  "paragraphs",
+  "turns",
+  "entries",
+  "results",
+  "items"
+] as const;
+
+function collectTokens(value: unknown, skipImmediate = false): Token[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  const tokens: Token[] = [];
+
+  const collectFromIterable = (items: Iterable<unknown>): void => {
+    for (const item of items) {
+      tokens.push(...collectTokens(item, false));
+    }
+  };
+
+  if (Array.isArray(value)) {
+    if (
+      value.length > 0 &&
+      value.every(
+        (item) =>
+          typeof item === "object" &&
+          item !== null &&
+          "text" in (item as Record<string, unknown>)
+      )
+    ) {
+      tokens.push(...(value as Token[]));
+    } else {
+      collectFromIterable(value);
+    }
+    return tokens;
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (!skipImmediate && Array.isArray(obj.tokens) && obj.tokens.length > 0) {
+      tokens.push(...(obj.tokens as Token[]));
+    }
+    for (const key of NESTED_TOKEN_KEYS) {
+      const nested = obj[key];
+      if (nested !== undefined) {
+        tokens.push(...collectTokens(nested, false));
+      }
+    }
+  }
+
+  return tokens;
 }
 
 export function tokensToSubtitleSegments(tokens: Token[], config: SubtitleConfig): SubtitleSegment[] {

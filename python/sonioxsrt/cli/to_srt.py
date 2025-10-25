@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -15,6 +16,15 @@ from ..subtitles import (
     render_segments,
     tokens_to_subtitle_segments,
     write_srt_file,
+)
+from ..translation import (
+    LLM_API_KEY_ENV,
+    LLM_BASE_URL_ENV,
+    LLM_MODEL_ENV,
+    DEFAULT_MODEL_ENV,
+    translate_entries,
+    translate_entries_with_review,
+    TranslationStats,
 )
 
 DEFAULT_CONFIG = SubtitleConfig()
@@ -80,8 +90,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--segment-on-sentence",
-        action="store_true",
-        help="End subtitle entries at sentence-ending punctuation even without long silences.",
+        dest="segment_on_sentence",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_CONFIG.segment_on_sentence,
+        help=(
+            "End subtitle entries at sentence-ending punctuation even without long silences. "
+            "Use --no-segment-on-sentence to disable."
+        ),
     )
     parser.add_argument(
         "--split-on-speaker",
@@ -92,6 +107,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--ellipses",
         action="store_true",
         help="Use ellipses (…) to mark continued sentences across subtitles.",
+    )
+    parser.add_argument(
+        "--translate-to",
+        help=(
+            "Translate the subtitles to the specified language using an OpenAI-compatible LLM. "
+            f"Requires {LLM_API_KEY_ENV} in the environment or --llm-api-key."
+        ),
+    )
+    parser.add_argument(
+        "--translation-passes",
+        type=int,
+        choices=(1, 3),
+        default=1,
+        help="Number of translation passes to run (1=draft only, 3=draft/review/refine).",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=os.environ.get(LLM_MODEL_ENV) or os.environ.get(DEFAULT_MODEL_ENV),
+        help=(
+            "Model name for translation (default: environment variable "
+            f"{LLM_MODEL_ENV}, then {DEFAULT_MODEL_ENV}, or gpt-4o-mini)."
+        ),
+    )
+    parser.add_argument(
+        "--llm-base-url",
+        default=os.environ.get(LLM_BASE_URL_ENV),
+        help=(
+            "Override the translation LLM base URL (default: environment variable "
+            f"{LLM_BASE_URL_ENV})."
+        ),
+    )
+    parser.add_argument(
+        "--llm-api-key",
+        default=os.environ.get(LLM_API_KEY_ENV),
+        help=(
+            "API key for the translation LLM (default: environment variable "
+            f"{LLM_API_KEY_ENV} or .env)."
+        ),
     )
     return parser
 
@@ -143,6 +196,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     entries = render_segments(segments, config)
+
+    if args.translate_to:
+        try:
+            stats = TranslationStats()
+            translate_fn = (
+                translate_entries_with_review
+                if args.translation_passes == 3
+                else translate_entries
+            )
+            entries = translate_fn(
+                entries,
+                target_language=args.translate_to,
+                config=config,
+                model=args.llm_model,
+                base_url=args.llm_base_url,
+                api_key=args.llm_api_key,
+                stats=stats,
+            )
+            print(
+                f"LLM usage: prompts={stats.prompt_tokens} completion={stats.completion_tokens}"
+                f" total={stats.total_tokens} tokens across {stats.calls} calls"
+            )
+        except Exception as exc:  # pragma: no cover - safeguard for CLI usage
+            print(f"Translation failed: {exc}", file=sys.stderr)
+            return 1
+
     write_srt_file(entries, Path(args.output))
     print(f"Wrote {len(entries)} subtitles to {args.output}")
     return 0
